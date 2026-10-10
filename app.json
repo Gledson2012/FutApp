@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "FutApp",
+    "slug": "futapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "futapp",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
