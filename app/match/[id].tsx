@@ -4,7 +4,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -18,6 +17,9 @@ import { StatsSection } from '../../src/components/match/StatsSection';
 import { PredictionSection } from '../../src/components/match/PredictionSection';
 import { CommentarySection } from '../../src/components/match/CommentarySection';
 import { EventsTimeline } from '../../src/components/match/EventsTimeline';
+import { HeadToHeadSection } from '../../src/components/match/HeadToHeadSection';
+import { MatchShareModal } from '../../src/components/match/MatchShareModal';
+import { PredictionModal } from '../../src/components/match/PredictionModal';
 import {
   getMatchCommentary,
   getMatchDetail,
@@ -33,13 +35,15 @@ import {
   MatchStatRow,
 } from '../../src/types';
 import { colors, radius, spacing } from '../../src/theme';
+import { calculatePredictionPoints, useUserPredictions } from '../../src/hooks/useUserPredictions';
 
-type Tab = 'resumo' | 'stats' | 'palpites' | 'narr';
+type Tab = 'resumo' | 'stats' | 'palpites' | 'h2h' | 'narr';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'stats', label: 'Estatísticas' },
   { id: 'palpites', label: 'Palpites' },
+  { id: 'h2h', label: 'H2H' },
   { id: 'narr', label: 'Narração' },
 ];
 
@@ -57,6 +61,10 @@ export default function MatchDetailsScreen() {
   const [comm, setComm] = useState<CommentaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [predModalVisible, setPredModalVisible] = useState(false);
+
+  const { getPrediction, savePrediction } = useUserPredictions();
 
   const load = useCallback(async () => {
     if (!id) {
@@ -89,27 +97,22 @@ export default function MatchDetailsScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const handleShare = async () => {
-    if (!match) return;
-    const scoreText =
-      match.homeScore !== undefined && match.awayScore !== undefined
-        ? `${match.homeScore} × ${match.awayScore}`
-        : 'vs';
-    const statusText =
-      match.status === 'live'
-        ? '🔴 AO VIVO'
-        : match.status === 'finished'
-          ? 'Finalizado'
-          : 'Acompanhe no FutApp';
-
-    const message = `⚽ ${match.home.name} ${scoreText} ${match.away.name} (${statusText})\n${match.competition ?? 'Futebol'} · Veja no FutApp!`;
-
-    try {
-      await Share.share({ message });
-    } catch {
-      // cancelado ou não suportado
-    }
+  const handleShare = () => {
+    setShareModalVisible(true);
   };
+
+  const currentPrediction = match ? getPrediction(match.id) : undefined;
+  const isFinished = match?.status === 'finished';
+  const scoreResult =
+    currentPrediction && match
+      ? calculatePredictionPoints(
+          currentPrediction.homeScore,
+          currentPrediction.awayScore,
+          match.homeScore,
+          match.awayScore,
+          isFinished,
+        )
+      : null;
 
   if (loading) {
     return (
@@ -158,6 +161,29 @@ export default function MatchDetailsScreen() {
           />
         }
       >
+        {/* Banner do Bolão / Palpite do Usuário */}
+        <Pressable
+          onPress={() => setPredModalVisible(true)}
+          style={styles.predictionBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Registrar ou editar palpite"
+        >
+          <View style={styles.predictionBannerLeft}>
+            <Ionicons name="dice-outline" size={20} color={colors.accent} />
+            <View>
+              <Text style={styles.predictionBannerTitle}>
+                {currentPrediction ? 'Seu Palpite Registrado' : 'Bolão: Dê o seu palpite!'}
+              </Text>
+              <Text style={styles.predictionBannerSubtitle}>
+                {currentPrediction
+                  ? `${currentPrediction.homeScore} × ${currentPrediction.awayScore}${scoreResult ? ` · ${scoreResult.label}` : ' (Aguardando resultado)'}`
+                  : 'Toque aqui para registrar seu placar e pontuar.'}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </Pressable>
+
         {tab === 'resumo' && (
           <>
             <MatchCard match={match} />
@@ -169,6 +195,8 @@ export default function MatchDetailsScreen() {
         {tab === 'stats' && <StatsSection match={match} stats={stats} />}
 
         {tab === 'palpites' && <PredictionSection match={match} pred={pred} />}
+
+        {tab === 'h2h' && <HeadToHeadSection match={match} />}
 
         {tab === 'narr' && <CommentarySection items={comm} />}
 
@@ -197,6 +225,26 @@ export default function MatchDetailsScreen() {
           <Text style={styles.linkText}>🔎 Ver escalações e notícias na web ↗</Text>
         </Pressable>
       </ScrollView>
+
+      {/* Modal de Compartilhamento Social */}
+      {match && (
+        <MatchShareModal
+          visible={shareModalVisible}
+          match={match}
+          onClose={() => setShareModalVisible(false)}
+        />
+      )}
+
+      {/* Modal de Palpite */}
+      {match && (
+        <PredictionModal
+          visible={predModalVisible}
+          match={match}
+          currentPrediction={currentPrediction}
+          onSave={(h, a) => savePrediction(match.id, h, a)}
+          onClose={() => setPredModalVisible(false)}
+        />
+      )}
     </View>
   );
 }
@@ -257,6 +305,33 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 14,
     fontWeight: '700',
+  },
+  predictionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.25)',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  predictionBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  predictionBannerTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  predictionBannerSubtitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   linkRow: {
     marginTop: spacing.sm,

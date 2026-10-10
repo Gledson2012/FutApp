@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -14,6 +14,7 @@ import { SectionHeader } from '../../src/components/SectionHeader';
 import { EmptyView } from '../../src/components/Feedback';
 import { SkeletonBlock } from '../../src/components/Skeleton';
 import { TeamCrest } from '../../src/components/TeamCrest';
+import { CompetitionFilter } from '../../src/components/CompetitionFilter';
 import { getLiveMatches, getTodayMatches, invalidateCache } from '../../src/services/api';
 import { Match } from '../../src/types';
 import { colors, radius, spacing } from '../../src/theme';
@@ -23,15 +24,36 @@ import { useFavorites } from '../../src/hooks/useFavorites';
 /** Auto-refresh dos jogos ao vivo (30s) */
 const AUTO_REFRESH_MS = 30_000;
 
+function filterMatchByComp(match: Match, compId: string): boolean {
+  if (compId === 'ALL') return true;
+  const comp = (match.competition || '').toLowerCase();
+  if (compId === 'BRA') return comp.includes('brasileir') || comp.includes('série a');
+  if (compId === 'CDB') return comp.includes('copa do brasil') || comp.includes('copa br');
+  if (compId === 'LIB') return comp.includes('libertadores');
+  if (compId === 'SUD') return comp.includes('sul-americana') || comp.includes('sudamericana');
+  if (compId === 'EST') {
+    return (
+      comp.includes('paulista') ||
+      comp.includes('carioca') ||
+      comp.includes('mineiro') ||
+      comp.includes('gaúcho') ||
+      comp.includes('estadual')
+    );
+  }
+  return true;
+}
+
 /**
  * Aba principal — jogos de HOJE:
  *  - Seção de favoritos (se houver times favoritados);
  *  - Seção vermelha: /matches/live (partidas em andamento);
- *  - Resto do dia: /matches?date=… (encerrados e a seguir).
+ *  - Resto do dia: /matches?date=… (encerrados e a seguir);
+ *  - Filtro por competições.
  */
 export default function TodayScreen() {
   const router = useRouter();
   const { favorites } = useFavorites();
+  const [selectedComp, setSelectedComp] = useState('ALL');
   const [today, setToday] = useState<Match[]>([]);
   const [live, setLive] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +82,16 @@ export default function TodayScreen() {
     setRefreshing(false);
   }, [load]);
 
+  const filteredLive = useMemo(
+    () => live.filter((m) => filterMatchByComp(m, selectedComp)),
+    [live, selectedComp],
+  );
+
+  const filteredToday = useMemo(
+    () => today.filter((m) => filterMatchByComp(m, selectedComp)),
+    [today, selectedComp],
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -70,17 +102,17 @@ export default function TodayScreen() {
     );
   }
 
-  const liveIds = new Set(live.map((m) => m.id));
-  const finished = today.filter(
+  const liveIds = new Set(filteredLive.map((m) => m.id));
+  const finished = filteredToday.filter(
     (m) => m.status === 'finished' && !liveIds.has(m.id),
   );
-  const scheduled = today.filter(
+  const scheduled = filteredToday.filter(
     (m) => m.status !== 'finished' && m.status !== 'live' && !liveIds.has(m.id),
   );
 
   // Jogos dos times favoritos hoje
   const favIds = new Set(favorites.map((f) => f.id));
-  const favMatches = today.filter(
+  const favMatches = filteredToday.filter(
     (m) => favIds.has(m.home.id) || favIds.has(m.away.id),
   );
 
@@ -100,6 +132,12 @@ export default function TodayScreen() {
       }
       ListHeaderComponent={
         <View>
+          {/* Filtro de Competições */}
+          <CompetitionFilter
+            selectedId={selectedComp}
+            onSelect={setSelectedComp}
+          />
+
           {/* Seção de Times Favoritos */}
           {favorites.length > 0 && (
             <View style={styles.favoritesBlock}>
@@ -145,18 +183,18 @@ export default function TodayScreen() {
 
           {/* Ao vivo agora */}
           <SectionHeader
-            title={`${live.length > 0 ? '🔴 ' : ''}Ao vivo agora`}
+            title={`${filteredLive.length > 0 ? '🔴 ' : ''}Ao vivo agora`}
             subtitle={formatLongDate(new Date())}
-            accent={live.length > 0}
+            accent={filteredLive.length > 0}
           />
-          {live.length === 0 ? (
+          {filteredLive.length === 0 ? (
             <EmptyView
               icon="football-outline"
               title="Nenhum jogo ao vivo"
-              message="No momento não há partidas em andamento."
+              message="No momento não há partidas em andamento nesta categoria."
             />
           ) : (
-            live.map((m) => (
+            filteredLive.map((m) => (
               <MatchCard key={m.id} match={m} onPress={() => openMatch(m.id)} />
             ))
           )}

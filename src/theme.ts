@@ -1,4 +1,23 @@
-export const colors = {
+export interface ThemeColors {
+  bg: string;
+  card: string;
+  cardAlt: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  textSecondary: string;
+  surface: string;
+  accent: string;
+  live: string;
+  warn: string;
+  danger: string;
+  info: string;
+  win: string;
+  draw: string;
+  loss: string;
+}
+
+export const darkColors: ThemeColors = {
   bg: '#0B0F14',
   card: '#151A21',
   cardAlt: '#1B232D',
@@ -15,7 +34,28 @@ export const colors = {
   win: '#22C55E',
   draw: '#94A3B8',
   loss: '#F87171',
-} as const;
+};
+
+export const lightColors: ThemeColors = {
+  bg: '#F8FAFC',
+  card: '#FFFFFF',
+  cardAlt: '#F1F5F9',
+  border: '#E2E8F0',
+  text: '#0F172A',
+  textMuted: '#64748B',
+  textSecondary: '#64748B',
+  surface: '#FFFFFF',
+  accent: '#16A34A',
+  live: '#DC2626',
+  warn: '#D97706',
+  danger: '#DC2626',
+  info: '#0284C7',
+  win: '#16A34A',
+  draw: '#64748B',
+  loss: '#EF4444',
+};
+
+export const colors = darkColors;
 
 export const spacing = {
   xs: 4,

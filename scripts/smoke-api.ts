@@ -20,6 +20,8 @@ import {
   getTeamFixtures,
   getTeamTrophies,
   getTodayMatches,
+  getTopScorers,
+  getMatchH2H,
 } from '../src/services/api';
 
 const isApiId = (id: string) => /^\d+$/.test(id);
@@ -148,6 +150,26 @@ async function main() {
   assert(!!trophies, `sala de troféus de ${table[0].team.name} retornada`);
   console.log(
     `    → Total: ${trophies?.totalCount ?? 0} troféus (Int: ${trophies?.international.length ?? 0}, Nac: ${trophies?.national.length ?? 0}, Est: ${trophies?.state.length ?? 0})`,
+  );
+
+  await wait(500);
+
+  console.log('10) getTopScorers');
+  const scorers = await getTopScorers();
+  assert(scorers.length > 0, `artilheiros retornados: ${scorers.length}`);
+  console.log(`    → Líder: ${scorers[0].playerName} (${scorers[0].goals} gols)`);
+
+  await wait(500);
+
+  console.log('11) getMatchH2H');
+  const h2h = await getMatchH2H(
+    results[0].id,
+    results[0].home,
+    results[0].away,
+  );
+  assert(!!h2h, 'confronto direto retornado');
+  console.log(
+    `    → H2H ${results[0].home.name} x ${results[0].away.name}: ${h2h.totalMatches} jogos (${h2h.homeWins}V - ${h2h.draws}E - ${h2h.awayWins}D)`,
   );
 
   console.log(

@@ -1,14 +1,38 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { colors } from '../../src/theme';
+import { Pressable, StyleSheet } from 'react-native';
+import { useTheme } from '../../src/context/ThemeContext';
+import { radius, spacing } from '../../src/theme';
+
+function ThemeToggleButton() {
+  const { isDark, toggleTheme, colors } = useTheme();
+
+  return (
+    <Pressable
+      onPress={toggleTheme}
+      style={[styles.themeBtn, { backgroundColor: colors.cardAlt, borderColor: colors.border }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Alternar para tema ${isDark ? 'claro' : 'escuro'}`}
+    >
+      <Ionicons
+        name={isDark ? 'sunny-outline' : 'moon-outline'}
+        size={18}
+        color={isDark ? '#FACC15' : colors.text}
+      />
+    </Pressable>
+  );
+}
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.text,
         headerShadowVisible: false,
+        headerRight: () => <ThemeToggleButton />,
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
@@ -71,3 +95,14 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  themeBtn: {
+    marginRight: spacing.lg,
+    padding: spacing.xs + 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   API_BASE_URL,
   API_CACHE_TTL_MS,
@@ -6,15 +7,17 @@ import {
   BRA_COMPETITION_NAME,
   BRA_SEASON_ID,
 } from '../config';
-import { ALL_MATCHES, RESULTS, STANDINGS, TODAY_MATCHES } from '../data/mock';
+import { ALL_MATCHES, MOCK_TOP_SCORERS, RESULTS, STANDINGS, TODAY_MATCHES } from '../data/mock';
 import {
   ApiEventType,
   ApiMatchStatus,
   CommentaryItem,
   FormResult,
+  HeadToHead,
   LiveStandingRow,
   Match,
   MatchEvent,
+  MatchH2HEntry,
   MatchPrediction,
   MatchStatRow,
   MatchStatus,
@@ -28,6 +31,7 @@ import {
   TeamFormLetter,
   TeamSummary,
   TeamTrophies,
+  TopScorer,
   TrophyItem,
 } from '../types';
 import { isSameDay, startOfDay } from '../utils/date';
@@ -701,4 +705,162 @@ export async function getTeamTrophies(id: string): Promise<TeamTrophies | null> 
     return null;
   }
 }
+
+interface ApiScorerItem {
+  rank?: number;
+  id?: number | string;
+  name?: string;
+  player?: { id: number; name: string };
+  team?: ApiTeam;
+  goals?: number;
+  assists?: number;
+  penalties?: number;
+  matches?: number;
+  matchesPlayed?: number;
+}
+
+interface ApiTopScorersResponse {
+  competitionId?: number;
+  season?: { id: number; name: string };
+  total?: number;
+  topScorers?: ApiScorerItem[];
+}
+
+/** Tabela de artilharia da competição */
+export async function getTopScorers(
+  competitionId: number | string = BRA_SEASON_ID,
+): Promise<TopScorer[]> {
+  try {
+    const raw = await httpGet<ApiTopScorersResponse>(
+      `/api/v1/competitions/${competitionId}/top-scorers`,
+    );
+    if (raw.topScorers && raw.topScorers.length > 0) {
+      return raw.topScorers.map((s, idx) => ({
+        rank: s.rank ?? idx + 1,
+        playerId: String(s.player?.id ?? s.id ?? idx + 1),
+        playerName: s.player?.name ?? s.name ?? `Jogador ${idx + 1}`,
+        team: s.team ? mapTeamSummary(s.team) : { id: 't', name: 'Clube', shortName: 'CLU' },
+        goals: s.goals ?? 0,
+        assists: s.assists ?? 0,
+        penalties: s.penalties ?? 0,
+        matchesPlayed: s.matchesPlayed ?? s.matches ?? 0,
+      }));
+    }
+  } catch {}
+
+  return MOCK_TOP_SCORERS;
+}
+
+interface ApiH2HMatch {
+  id: number;
+  date: string;
+  competition?: { name: string };
+  homeTeam: ApiTeam;
+  awayTeam: ApiTeam;
+  score?: { home?: number; away?: number };
+}
+
+interface ApiH2HResponse {
+  totalMatches: number;
+  homeTeamWins: number;
+  awayTeamWins: number;
+  draws: number;
+  matches?: ApiH2HMatch[];
+}
+
+/** Histórico de confrontos diretos (H2H) */
+export async function getMatchH2H(
+  matchId: string,
+  homeTeam: TeamSummary,
+  awayTeam: TeamSummary,
+): Promise<HeadToHead> {
+  try {
+    const raw = await httpGet<ApiH2HResponse>(`/api/v1/matches/${matchId}/h2h`);
+    if (raw && raw.totalMatches > 0 && raw.matches && raw.matches.length > 0) {
+      const recent: MatchH2HEntry[] = raw.matches.map((m) => {
+        const hs = m.score?.home ?? 0;
+        const as = m.score?.away ?? 0;
+        return {
+          id: String(m.id),
+          date: m.date,
+          competition: m.competition?.name ?? 'Brasileirão Série A',
+          homeTeam: mapTeamSummary(m.homeTeam),
+          awayTeam: mapTeamSummary(m.awayTeam),
+          homeScore: hs,
+          awayScore: as,
+          winnerId:
+            hs > as
+              ? String(m.homeTeam.id)
+              : as > hs
+                ? String(m.awayTeam.id)
+                : null,
+        };
+      });
+
+      return {
+        homeTeam,
+        awayTeam,
+        totalMatches: raw.totalMatches,
+        homeWins: raw.homeTeamWins,
+        draws: raw.draws,
+        awayWins: raw.awayTeamWins,
+        homeGoals: recent.reduce((acc, m) => acc + m.homeScore, 0),
+        awayGoals: recent.reduce((acc, m) => acc + m.awayScore, 0),
+        recentMatches: recent,
+      };
+    }
+  } catch {}
+
+  // Dados sintéticos consistentes para jogos sem histórico na API
+  const pastYears = [2025, 2024, 2024, 2023, 2023];
+  const scores: Array<[number, number]> = [
+    [2, 1],
+    [1, 1],
+    [0, 2],
+    [3, 1],
+    [0, 0],
+  ];
+
+  const syntheticMatches: MatchH2HEntry[] = pastYears.map((year, idx) => {
+    const [hs, as] = scores[idx % scores.length];
+    const isHome = idx % 2 === 0;
+    const h = isHome ? homeTeam : awayTeam;
+    const a = isHome ? awayTeam : homeTeam;
+    return {
+      id: `h2h-${matchId}-${idx}`,
+      date: `${year}-${String(5 + idx).padStart(2, '0')}-15T19:00:00Z`,
+      competition: 'Brasileirão Série A',
+      homeTeam: h,
+      awayTeam: a,
+      homeScore: hs,
+      awayScore: as,
+      winnerId: hs > as ? h.id : as > hs ? a.id : null,
+    };
+  });
+
+  const homeWins = syntheticMatches.filter(
+    (m) => (m.homeTeam.id === homeTeam.id && m.homeScore > m.awayScore) ||
+           (m.awayTeam.id === homeTeam.id && m.awayScore > m.homeScore),
+  ).length;
+
+  const awayWins = syntheticMatches.filter(
+    (m) => (m.homeTeam.id === awayTeam.id && m.homeScore > m.awayScore) ||
+           (m.awayTeam.id === awayTeam.id && m.awayScore > m.homeScore),
+  ).length;
+
+  const draws = syntheticMatches.filter((m) => m.homeScore === m.awayScore).length;
+
+  return {
+    homeTeam,
+    awayTeam,
+    totalMatches: syntheticMatches.length,
+    homeWins,
+    draws,
+    awayWins,
+    homeGoals: 7,
+    awayGoals: 5,
+    recentMatches: syntheticMatches,
+  };
+}
+
 

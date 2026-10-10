@@ -6,6 +6,7 @@ import { Match, Team } from '../types';
 import { colors, radius, spacing } from '../theme';
 import { formatTime } from '../utils/date';
 import { FavoriteStar } from './TeamCrest';
+import { calculatePredictionPoints, useUserPredictions } from '../hooks/useUserPredictions';
 
 interface Props {
   match: Match;
@@ -167,12 +168,24 @@ function TeamRow({
 
 /** Card de jogo: times, placar/horário, status e competição */
 export function MatchCard({ match, onPress, style }: Props) {
+  const { getPrediction } = useUserPredictions();
   const isLive = match.status === 'live' || match.status === 'half_time';
   const isFinished = match.status === 'finished';
   const showScore = isLive || isFinished;
   const metaLine = [match.competition, match.round]
     .filter(Boolean)
     .join(' · ');
+
+  const prediction = getPrediction(match.id);
+  const scoreResult = prediction
+    ? calculatePredictionPoints(
+        prediction.homeScore,
+        prediction.awayScore,
+        match.homeScore,
+        match.awayScore,
+        isFinished,
+      )
+    : null;
 
   return (
     <Pressable
@@ -207,12 +220,36 @@ export function MatchCard({ match, onPress, style }: Props) {
         isLive={isLive}
       />
 
-      {!!match.venue && (
-        <View style={styles.venueRow}>
-          <Ionicons name="location-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.venue}>{match.venue}</Text>
-        </View>
-      )}
+      <View style={styles.footerRow}>
+        {!!match.venue && (
+          <View style={styles.venueRow}>
+            <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+            <Text style={styles.venue} numberOfLines={1}>{match.venue}</Text>
+          </View>
+        )}
+
+        {/* Badge do Palpite do Usuário */}
+        {!!prediction && (
+          <View
+            style={[
+              styles.predBadge,
+              scoreResult && scoreResult.points > 0 && styles.predBadgeSuccess,
+              scoreResult && scoreResult.points === 0 && styles.predBadgeFail,
+            ]}
+          >
+            <Text
+              style={[
+                styles.predBadgeText,
+                scoreResult && scoreResult.points > 0 && styles.predBadgeTextSuccess,
+              ]}
+            >
+              {scoreResult
+                ? `${scoreResult.points > 0 ? `+${scoreResult.points} pts` : '0 pts'} (${prediction.homeScore}×${prediction.awayScore})`
+                : `🎲 Palpite: ${prediction.homeScore}×${prediction.awayScore}`}
+            </Text>
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -286,11 +323,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: spacing.xs,
+    flex: 1,
   },
   venue: {
     color: colors.textMuted,
     fontSize: 12,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+    gap: spacing.sm,
+  },
+  predBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+  },
+  predBadgeSuccess: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  predBadgeFail: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  predBadgeText: {
+    color: colors.info,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  predBadgeTextSuccess: {
+    color: colors.win,
   },
   badge: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -11,19 +11,39 @@ import { useRouter } from 'expo-router';
 import { MatchCard } from '../../src/components/MatchCard';
 import { SectionHeader } from '../../src/components/SectionHeader';
 import { EmptyView, LoadingView } from '../../src/components/Feedback';
+import { CompetitionFilter } from '../../src/components/CompetitionFilter';
 import { getMatchesByDay, invalidateCache } from '../../src/services/api';
 import { Match } from '../../src/types';
 import { BRA_COMPETITION_NAME } from '../../src/config';
 import { colors, radius, spacing } from '../../src/theme';
 import { addDays, formatDayShort, startOfDay } from '../../src/utils/date';
 
+function filterMatchByComp(match: Match, compId: string): boolean {
+  if (compId === 'ALL') return true;
+  const comp = (match.competition || '').toLowerCase();
+  if (compId === 'BRA') return comp.includes('brasileir') || comp.includes('série a');
+  if (compId === 'CDB') return comp.includes('copa do brasil') || comp.includes('copa br');
+  if (compId === 'LIB') return comp.includes('libertadores');
+  if (compId === 'SUD') return comp.includes('sul-americana') || comp.includes('sudamericana');
+  if (compId === 'EST') {
+    return (
+      comp.includes('paulista') ||
+      comp.includes('carioca') ||
+      comp.includes('mineiro') ||
+      comp.includes('gaúcho') ||
+      comp.includes('estadual')
+    );
+  }
+  return true;
+}
+
 /**
  * Aba "Calendário" — fixtures do Brasileirão (GET /matches?status=SCHEDULED)
- * com faixa de 14 dias; os fixtures ficam em cache, então trocar de dia não
- * gera novas chamadas à API.
+ * com faixa de 14 dias e filtro por competição.
  */
 export default function CalendarScreen() {
   const router = useRouter();
+  const [selectedComp, setSelectedComp] = useState('ALL');
   const [days, setDays] = useState<Date[]>([]);
   const [selected, setSelected] = useState<Date>(startOfDay(new Date()));
   const [matches, setMatches] = useState<Match[]>([]);
@@ -53,6 +73,11 @@ export default function CalendarScreen() {
     setRefreshing(false);
   }, [selected, load]);
 
+  const filteredMatches = useMemo(
+    () => matches.filter((m) => filterMatchByComp(m, selectedComp)),
+    [matches, selectedComp],
+  );
+
   if (loading) {
     return <LoadingView label="Carregando calendário..." />;
   }
@@ -61,6 +86,14 @@ export default function CalendarScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Filtro de Competições */}
+      <View style={styles.filterWrapper}>
+        <CompetitionFilter
+          selectedId={selectedComp}
+          onSelect={setSelectedComp}
+        />
+      </View>
+
       {/* Faixa de dias */}
       <ScrollView
         horizontal
@@ -100,16 +133,16 @@ export default function CalendarScreen() {
       >
         <SectionHeader
           title={`Jogos de ${formatDayShort(selected)}`}
-          subtitle={`${BRA_COMPETITION_NAME} · ${matches.length} jogo(s)`}
+          subtitle={`${BRA_COMPETITION_NAME} · ${filteredMatches.length} jogo(s)`}
         />
-        {matches.length === 0 ? (
+        {filteredMatches.length === 0 ? (
           <EmptyView
             icon="calendar-outline"
-            title="Nenhum jogo neste dia"
-            message="Selecione outro dia na faixa acima."
+            title="Nenhum jogo neste filtro"
+            message="Selecione outro dia ou competição acima."
           />
         ) : (
-          matches.map((m) => (
+          filteredMatches.map((m) => (
             <MatchCard key={m.id} match={m} onPress={() => openMatch(m.id)} />
           ))
         )}
@@ -122,9 +155,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  filterWrapper: {
+    paddingTop: spacing.xs,
+  },
   dayStrip: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
   dayChip: {
@@ -155,6 +191,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xl * 2,
   },
 });
+

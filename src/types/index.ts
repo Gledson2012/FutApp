@@ -222,3 +222,51 @@ export interface LiveStandingRow extends StandingRow {
   liveMatchId?: string | null;
 }
 
+/** Artilheiro / Jogador em destaque */
+export interface TopScorer {
+  rank: number;
+  playerId: string;
+  playerName: string;
+  team: TeamSummary;
+  goals: number;
+  assists?: number;
+  penalties?: number;
+  matchesPlayed: number;
+  avatarUrl?: string | null;
+}
+
+/** Partida histórica entre dois times */
+export interface MatchH2HEntry {
+  id: string;
+  date: string;
+  competition: string;
+  homeTeam: TeamSummary;
+  awayTeam: TeamSummary;
+  homeScore: number;
+  awayScore: number;
+  winnerId?: string | null;
+}
+
+/** Resumo Head-to-Head (Confronto Direto) */
+export interface HeadToHead {
+  homeTeam: TeamSummary;
+  awayTeam: TeamSummary;
+  totalMatches: number;
+  homeWins: number;
+  draws: number;
+  awayWins: number;
+  homeGoals: number;
+  awayGoals: number;
+  recentMatches: MatchH2HEntry[];
+}
+
+/** Palpite local do usuário para a partida */
+export interface UserPrediction {
+  matchId: string;
+  homeScore: number;
+  awayScore: number;
+  updatedAt: string;
+  points?: number | null;
+}
+
+
